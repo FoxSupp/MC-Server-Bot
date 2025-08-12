@@ -44,7 +44,7 @@ client.once(Events.ClientReady, async () => {
 
   // Slash-Command /ip pro Guild registrieren (schnelle Verfügbarkeit)
   try {
-    const commandData = [{ name: 'ip', description: 'Zeigt die Minecraft-Server IP(s)' }];
+    const commandData = [{ name: 'ip', description: 'Zeigt die Minecraft-Server IP(s)' }, { name: 'players', description: 'Zeigt alle Spieler auf den Servern' }];
     await Promise.all(
       client.guilds.cache.map((guild) => guild.commands.set(commandData))
     );
@@ -83,7 +83,7 @@ client.once(Events.ClientReady, async () => {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (!interaction.isChatInputCommand()) return;
-    if (interaction.commandName !== 'ip') return;
+    if (interaction.commandName == 'ip') {
     let list = "SERVERS\n";
     list += hosts
       .map(({ host, port, name }) => `• ${name} — ${host}:${port}`)
@@ -94,7 +94,34 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: list || 'Keine Server konfiguriert.',
       flags: MessageFlags.Ephemeral
     });
-  } catch (e) {
+  }
+  if (interaction.commandName == 'players') {
+    let list = "PLAYERS\n";
+    // Für alle Server Status abfragen und Spielernamen sammeln
+    const results = await Promise.all(
+      hosts.map(async ({ host, port, name }) => {
+        try {
+          const res = await mcStatus(host, port, { timeout: 4000, enableSRV: true });
+          const online = res.players?.online ?? 0;
+          const max = res.players?.max ?? '?';
+          const playerNames = res.players?.sample?.length
+            ? res.players.sample.map(p => p.name).join(', ')
+            : (online > 0 ? 'Namen nicht verfügbar' : 'Keine Spieler online');
+          return `• ${name} — ${host}:${port}\n  Spieler (${online}/${max}): ${playerNames}`;
+        } catch {
+          return `• ${name} — ${host}:${port}\n  Server offline`;
+        }
+      })
+    );
+    list += results.join('\n\n');
+    list += "\n";
+
+    await interaction.reply({
+      content: list || 'Keine Server konfiguriert.',
+      flags: MessageFlags.Ephemeral
+    });
+  }
+    } catch (e) {
     try {
       if (!interaction.replied) {
         await interaction.reply({ content: 'Fehler beim Anzeigen der IPs.', ephemeral: true });
