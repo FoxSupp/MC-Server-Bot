@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Events, MessageFlags } from 'discord.js';
 import { status as mcStatus } from 'minecraft-server-util';
 
 const { DISCORD_TOKEN, MC_HOST, MC_PORT } = process.env;
@@ -42,6 +42,17 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
+  // Slash-Command /ip pro Guild registrieren (schnelle Verfügbarkeit)
+  try {
+    const commandData = [{ name: 'ip', description: 'Zeigt die Minecraft-Server IP(s)' }];
+    await Promise.all(
+      client.guilds.cache.map((guild) => guild.commands.set(commandData))
+    );
+    console.log('Slash-Command /ip registriert.');
+  } catch (e) {
+    console.warn('Konnte Slash-Command /ip nicht registrieren:', e);
+  }
+
   let idx = 0;
 
   const updatePresence = async () => {
@@ -66,6 +77,30 @@ client.once(Events.ClientReady, async () => {
 
   await updatePresence();
   setInterval(updatePresence, 5_000); // alle 5 Sekunden rotieren
+});
+
+// /ip Handler
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (!interaction.isChatInputCommand()) return;
+    if (interaction.commandName !== 'ip') return;
+    let list = "SERVERS\n";
+    list += hosts
+      .map(({ host, port, name }) => `• ${name} — ${host}:${port}`)
+      .join('\n');
+    list += "\n\n";
+
+    await interaction.reply({
+      content: list || 'Keine Server konfiguriert.',
+      flags: MessageFlags.Ephemeral
+    });
+  } catch (e) {
+    try {
+      if (!interaction.replied) {
+        await interaction.reply({ content: 'Fehler beim Anzeigen der IPs.', ephemeral: true });
+      }
+    } catch {}
+  }
 });
 
 client.login((DISCORD_TOKEN || '').trim());
